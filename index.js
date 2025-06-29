@@ -8,7 +8,6 @@ fastify.register(cors,{origin: "*"});
 
 const VERIFY_TOKEN = ''
 const PAGE_ACCESS_TOKEN = ''
- 
 
 fastify.register(fastifyWebsocket, {
   options: { perMessageDeflate: false }
@@ -102,7 +101,7 @@ fastify.post('/webhook', async (request, reply) => {
         const msg  =  entry.messaging[0].message.text
         console.log("sg, senderId => ", msg, senderId)
  
-       const payload = JSON.stringify({
+    const payload = JSON.stringify({
       type: 'fb-message',
       senderId,
       message: msg,
@@ -127,6 +126,16 @@ async function sendToFacebook(recipientId, text) {
       message:   text
     });
 
+    const payload = JSON.stringify({
+      type: 'fb-message',
+      recipientId,
+      message: `AI: ${text.text}`,
+      timestamp: new Date().toISOString()
+    });
+    for (const client of fastify.websocketServer.clients) {
+      if (client.readyState === 1) client.send(payload);
+    }
+    
     fastify.log.info(`Sent message to ${recipientId}`);
   } catch (err) {
     const fbErr = err.response ? err.response.data : err;
