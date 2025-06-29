@@ -1,0 +1,17 @@
+{
+  "name": "service_wss_demo_chatbot",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^11.1.0",
+    "axios": "^1.10.0",
+    "fastify": "^5.4.0"
+  }
+}
