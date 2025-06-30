@@ -6,8 +6,9 @@ import cors from '@fastify/cors'
 const fastify = Fastify({ logger: true });
 fastify.register(cors,{origin: "*"});
 
-const VERIFY_TOKEN = ''
-const PAGE_ACCESS_TOKEN = ''
+const VERIFY_TOKEN = 'chatbot000111'
+const PAGE_ACCESS_TOKEN = 'EAAHCJYzoZBZCABO1zPzFO4iZAhTo4SktjQEkTWZArOlPqbgvOwc4WECPflSyeUTGZBuvUc1iBlepdk6ZBwEghNRHiTCln7fijIZBTzGFwbXh6Q3xJfZCGiPwbAIWwFqm6DvvI05JZBSqv7VsKlvQ2aiYRtl0iAgydOIKf1E1uzA088EpxSgN97wEGIwaZAMRQ38KVeuHTzguU5'
+// const ws = new WebSocket("wss://api.bkkdemoondevearth.work/ws");
 
 fastify.register(fastifyWebsocket, {
   options: { perMessageDeflate: false }
