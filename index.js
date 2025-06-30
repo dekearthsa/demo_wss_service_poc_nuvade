@@ -1,14 +1,24 @@
 import Fastify from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
 import axios from 'axios';
-import { randomUUID } from 'crypto';
+import { MongoClient } from 'mongodb';
+// import { randomUUID } from 'crypto';
 import cors from '@fastify/cors'
 const fastify = Fastify({ logger: true });
 fastify.register(cors,{origin: "*"});
 
 const VERIFY_TOKEN = ''
 const PAGE_ACCESS_TOKEN = ''
-// const ws = new WebSocket("wss://api.bkkdemoondevearth.work/ws");
+const DB = '';
+const COLLECTION = '';
+const MONGO_URI = '';
+const mongoClient = new MongoClient(MONGO_URI, {
+    tls: false,
+    serverSelectionTimeoutMS: 5000
+});
+
+await mongoClient.connect();
+fastify.log.info('MongoDB connected');
 
 fastify.register(fastifyWebsocket, {
   options: { perMessageDeflate: false }
@@ -16,9 +26,29 @@ fastify.register(fastifyWebsocket, {
 
 const clients = new Set()
 
-fastify.register(async function (fastify) {
- 
+const crudFunc = async (data) => {
+  try{
+    const date = Date.now();
 
+    const payload = {
+      text: data.text,
+      platform: data.platform,
+      messageType: data.messageType,
+      recID: data.recID,
+      pageID: data.pageID,
+      timestamp: date
+    }
+    const db = mongoClient.db(DB);
+    const collection = db.collection(COLLECTION);
+    await collection.insertOne(payload);
+    return true
+  }catch(err){
+    console.log(`insert into curdFunc error ${err}`);
+    return false
+  }
+}
+
+fastify.register(async function (fastify) {
   fastify.get('/ws', { websocket: true }, (socket, req ) => {
     const clientIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     fastify.log.info(`[WS] New client connected from ${clientIP}`);
@@ -96,11 +126,11 @@ fastify.post('/webhook', async (request, reply) => {
    
     for (const entry of body.entry) {
         const event = entry.messaging && entry.messaging[0];
-        
+        console.log(event)
         if (!event) continue;
         const senderId = event.sender && event.sender.id;
         const msg  =  entry.messaging[0].message.text
-        console.log("sg, senderId => ", msg, senderId)
+        // console.log("sg, senderId => ", msg, senderId,body.entry[0].id )
  
     const payload = JSON.stringify({
       type: 'fb-message',
@@ -108,16 +138,24 @@ fastify.post('/webhook', async (request, reply) => {
       message: msg,
       timestamp: new Date().toISOString()
     });
+    const setStructCrud = {
+      pageID: body.entry[0].id,
+      text: msg,
+      platform: body.object,
+      messageType: "client",
+      recID: senderId,
+    }
+    await crudFunc(setStructCrud);
     for (const client of fastify.websocketServer.clients) {
       if (client.readyState === 1) client.send(payload);
     }
-        sendToFacebook(senderId, {text: msg})
- 
+        sendToFacebook(senderId, {text: msg}, setStructCrud)
+
     }
 });
 
  
-async function sendToFacebook(recipientId, text) {
+async function sendToFacebook(recipientId, text, data) {
     // console.log("text => ", text)
   try {
     const url =  `https://graph.facebook.com/v17.0/642155692311378/messages?access_token=${PAGE_ACCESS_TOKEN}`      
@@ -136,7 +174,8 @@ async function sendToFacebook(recipientId, text) {
     for (const client of fastify.websocketServer.clients) {
       if (client.readyState === 1) client.send(payload);
     }
-    
+    data.messageType = "AI"
+    await crudFunc(data);
     fastify.log.info(`Sent message to ${recipientId}`);
   } catch (err) {
     const fbErr = err.response ? err.response.data : err;
