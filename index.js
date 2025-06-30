@@ -1,13 +1,15 @@
 import Fastify from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
-import axios from 'axios';
 import { MongoClient } from 'mongodb';
-// import { randomUUID } from 'crypto';
 import cors from '@fastify/cors'
+import sendToFacebook from './controller/sendToMeta.js';
+import crudFunc from './controller/crudFunc.js';
+
 const fastify = Fastify({ logger: true });
 fastify.register(cors,{origin: "*"});
 
 const VERIFY_TOKEN = ''
+const DEMO_PAGEID = ''
 const PAGE_ACCESS_TOKEN = ''
 const DB = '';
 const COLLECTION = '';
@@ -26,27 +28,6 @@ fastify.register(fastifyWebsocket, {
 
 const clients = new Set()
 
-const crudFunc = async (data) => {
-  try{
-    const date = Date.now();
-
-    const payload = {
-      text: data.text,
-      platform: data.platform,
-      messageType: data.messageType,
-      recID: data.recID,
-      pageID: data.pageID,
-      timestamp: date
-    }
-    const db = mongoClient.db(DB);
-    const collection = db.collection(COLLECTION);
-    await collection.insertOne(payload);
-    return true
-  }catch(err){
-    console.log(`insert into curdFunc error ${err}`);
-    return false
-  }
-}
 
 fastify.register(async function (fastify) {
   fastify.get('/ws', { websocket: true }, (socket, req ) => {
@@ -59,15 +40,13 @@ fastify.register(async function (fastify) {
     // ส่งข้อความต้อนรับ
     socket.send(JSON.stringify({
       type: 'system',
-      message: '👋 Connected to WebSocket server!',
+      message: 'Connected to WebSocket server!',
       timestamp: new Date().toISOString()
     }));
 
-    // รับข้อความจาก client
     socket.on('message', (msg) => {
       fastify.log.info(`[WS] Message received: ${msg}`);
 
-      // ตอบกลับ
       socket.send(JSON.stringify({
         type: 'echo',
         received: msg.toString(),
@@ -75,31 +54,27 @@ fastify.register(async function (fastify) {
       }));
     });
 
-    // เมื่อปิดการเชื่อมต่อ
     socket.on('close', () => {
       fastify.log.info('[WS] Client disconnected');
       clients.delete(socket);
     });
 
-    // ดักจับ error เพื่อป้องกันการ crash
     socket.on('error', (err) => {
       fastify.log.error('[WS] Error:', err);
       clients.delete(socket);
     });
   });
 
-  // Optional: ฟังก์ชัน broadcast ไปยังทุก client
   fastify.decorate('broadcast', (data) => {
     const msg = JSON.stringify(data);
     for (const client of clients) {
-      if (client.readyState === 1) { // WebSocket.OPEN
+      if (client.readyState === 1) {
         client.send(msg);
       }
     }
   });
 });
  
-
 
 fastify.get('/debug', async (request, reply) => {
     return reply.code(200).send("ok");
@@ -145,43 +120,15 @@ fastify.post('/webhook', async (request, reply) => {
       messageType: "client",
       recID: senderId,
     }
-    await crudFunc(setStructCrud);
+    await crudFunc(mongoClient, DB, COLLECTION,setStructCrud);
     for (const client of fastify.websocketServer.clients) {
       if (client.readyState === 1) client.send(payload);
     }
-        sendToFacebook(senderId, {text: msg}, setStructCrud)
+      sendToFacebook(senderId, {text: msg}, setStructCrud, mongoClient, DB, COLLECTION, DEMO_PAGEID,PAGE_ACCESS_TOKEN)
 
     }
 });
-
  
-async function sendToFacebook(recipientId, text, data) {
-    // console.log("text => ", text)
-  try {
-    const url =  `https://graph.facebook.com/v17.0/642155692311378/messages?access_token=${PAGE_ACCESS_TOKEN}`      
-    await axios.post(url, {
-      messaging_type: "RESPONSE", 
-      recipient: { id: recipientId },
-      message:   text
-    });
-
-    const payload = JSON.stringify({
-      type: 'fb-message',
-      recipientId,
-      message: `AI: ${text.text}`,
-      timestamp: new Date().toISOString()
-    });
-    for (const client of fastify.websocketServer.clients) {
-      if (client.readyState === 1) client.send(payload);
-    }
-    data.messageType = "AI"
-    await crudFunc(data);
-    fastify.log.info(`Sent message to ${recipientId}`);
-  } catch (err) {
-    const fbErr = err.response ? err.response.data : err;
-    fastify.log.error("FB Send Error:", fbErr);
-  }
-}
 
 fastify.listen({ port: 3012, host: '0.0.0.0' }, (err, address) => {
     if (err) {
